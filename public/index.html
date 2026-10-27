@@ -1,0 +1,99 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Blooming Tales SmartQueue</title>
+<style>
+body{font-family:Inter,Arial,sans-serif;margin:0;background:#f7f2ea;color:#2e251f}
+header{background:#3d2b24;color:white;padding:22px 7%;display:flex;justify-content:space-between;align-items:center}
+h1{margin:0;font-size:24px}.sub{opacity:.8;font-size:13px}
+main{max-width:1100px;margin:28px auto;padding:0 18px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px}
+.card{background:white;border-radius:18px;padding:22px;box-shadow:0 6px 24px #3d2b2414}
+button{border:0;border-radius:10px;padding:11px 14px;background:#6b4938;color:white;cursor:pointer;margin:4px}
+button.secondary{background:#eee2d6;color:#3d2b24}
+input{width:100%;box-sizing:border-box;padding:11px;border:1px solid #ddd0c2;border-radius:9px;margin:7px 0 12px}
+.stat{font-size:30px;font-weight:800}.muted{color:#776b62}.token{font-size:42px;font-weight:900}
+.row{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #eee4da;padding:12px 0}
+.badge{padding:5px 9px;border-radius:20px;background:#efe3d7;font-size:12px}
+.small{font-size:12px}.error{color:#a33}
+</style>
+</head>
+<body>
+<header>
+<div><h1>Blooming Tales ☕ SmartQueue</h1><div class="sub">Digital queue • CRM-ready • Analytics-ready</div></div>
+<div><button class="secondary" onclick="refreshAll()">Refresh</button></div>
+</header>
+<main>
+<div class="grid">
+<section class="card">
+<h2>Customer: Join Queue</h2>
+<label>Name</label><input id="name" placeholder="Your name">
+<label>Mobile</label><input id="mobile" placeholder="10-digit mobile">
+<label>Party size</label><input id="party" type="number" min="1" max="20" value="2">
+<button onclick="joinQueue()">Join Queue</button>
+<div id="customerResult"></div>
+</section>
+
+<section class="card">
+<h2>Staff Dashboard</h2>
+<div id="staff"></div>
+</section>
+
+<section class="card">
+<h2>Analytics</h2>
+<div id="analytics"></div>
+</section>
+</div>
+</main>
+
+<script>
+async function api(url,opts={}){const r=await fetch(url,{headers:{'Content-Type':'application/json'},...opts});const d=await r.json();if(!r.ok)throw new Error(d.error||'Request failed');return d}
+
+async function joinQueue(){
+  try{
+    const name=document.getElementById('name').value.trim();
+    const mobile=document.getElementById('mobile').value.trim();
+    const party=Number(document.getElementById('party').value);
+    const x=await api('/api/queue',{method:'POST',body:JSON.stringify({name,mobile,partySize:party})});
+    document.getElementById('customerResult').innerHTML=
+      `<hr><div class="token">${x.token}</div>
+       <b>${x.groupsAhead} groups ahead</b><p>Estimated wait: <b>${x.estimatedWait} min</b></p>
+       <span class="badge">Status: ${x.status}</span>`;
+    refreshAll();
+  }catch(e){document.getElementById('customerResult').innerHTML=`<p class="error">${e.message}</p>`}
+}
+
+async function action(id,action){await api('/api/queue/'+id,{method:'PATCH',body:JSON.stringify({action})});refreshAll()}
+
+async function refreshAll(){
+  const q=await api('/api/queue');
+  const active=q.active;
+  document.getElementById('staff').innerHTML=active.length?active.map(x=>`
+    <div class="row">
+      <div><b>${x.token}</b> — ${escapeHtml(x.name)}<br><span class="small">${x.partySize} guests • ${x.groupsAhead} ahead • ~${x.estimatedWait} min</span></div>
+      <div>
+        ${x.status==='WAITING'?`<button onclick="action('${x.id}','CALL')">Call</button>`:''}
+        <button onclick="action('${x.id}','SEAT')">Seat</button>
+        <button onclick="action('${x.id}','CANCEL')">Cancel</button>
+      </div>
+    </div>`).join(''):'<p class="muted">Queue is empty.</p>';
+
+  const a=await api('/api/analytics');
+  document.getElementById('analytics').innerHTML=`
+    <div class="grid">
+      <div><div class="stat">${a.queueSize}</div><div class="muted">Active queue</div></div>
+      <div><div class="stat">${a.servedToday}</div><div class="muted">Served</div></div>
+      <div><div class="stat">${a.averageWaitMinutes}m</div><div class="muted">Avg wait</div></div>
+      <div><div class="stat">${a.cancelledToday}</div><div class="muted">Cancelled</div></div>
+    </div>
+    <p class="small muted">${a.note}</p>`;
+}
+function escapeHtml(s){return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+refreshAll();
+setInterval(refreshAll,5000);
+</script>
+</body>
+</html>
